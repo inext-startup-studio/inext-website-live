@@ -8,3 +8,6 @@ wordpress/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Tooling scratch — this repo holds the built site and nothing else
+.semgrep/
