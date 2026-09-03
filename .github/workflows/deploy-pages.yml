@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+# This repo is a publish target, not a source repo: the site is built in the
+# private inext-website repo and pushed here by its publish-live workflow.
+# Deploying through Actions rather than the legacy Jekyll pipeline avoids two
+# traps — Jekyll silently dropping the underscore-prefixed _next/ directory,
+# and push-triggered legacy builds occasionally deploying the previous commit.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue them instead of cancelling, so the last
+# push always ends up being the one that is live.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/configure-pages@v6
+
+      - name: Stage the site
+        # Everything except repo plumbing is web content. Staging rather than
+        # uploading "." keeps .git and the workflow itself off the public site.
+        run: |
+          mkdir -p _site
+          rsync -a --exclude .git --exclude .github --exclude _site ./ _site/
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+          # Hidden files are excluded by default, which would silently drop the
+          # .nojekyll the source repo writes — the guard that keeps _next/ intact
+          # if this site is ever switched back to the legacy Jekyll pipeline.
+          include-hidden-files: true
+
+      - id: deployment
+        uses: actions/deploy-pages@v5
+        with:
+          # A deploy of this site takes around ten minutes, which is exactly the
+          # action's default. When polling times out it cancels the deployment and
+          # fails the run — sometimes after Pages has already finished, so the run
+          # goes red on a site that did publish. Give it room rather than leave
+          # that a coin flip.
+          timeout: 1800000
